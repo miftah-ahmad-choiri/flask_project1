@@ -1,1 +1,2 @@
-# flask_project1
+# Flask_project
+This is a simple flask project
