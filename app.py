@@ -6,11 +6,16 @@ from flask import (
 )
 
 from flask_cors import CORS
-from pyngrok import ngrok
 
 import pandas as pd
 import os
-import shutil
+
+# Optional ngrok
+USE_NGROK = False
+
+if USE_NGROK:
+    from pyngrok import ngrok
+
 
 # ==========================
 # Flask setup
@@ -26,28 +31,59 @@ CORS(
     }
 )
 
+
+# ==========================
+# Base project directory
+# ==========================
+CURRENT_DIR = os.getcwd()
+
 # ==========================
 # Directories
 # ==========================
-BASE_DIR = "/content/uploads"
-
-EXCEL_DIR = (
-    f"{BASE_DIR}/excel"
+TEMPLATE_DIR = os.path.join(
+    CURRENT_DIR,
+    "templates"
 )
 
-IMAGE_DIR = (
-    f"{BASE_DIR}/images"
+UPLOAD_DIR = os.path.join(
+    CURRENT_DIR,
+    "uploads"
 )
 
-os.makedirs(
+EXCEL_DIR = os.path.join(
+    UPLOAD_DIR,
+    "excel"
+)
+
+IMAGE_DIR = os.path.join(
+    UPLOAD_DIR,
+    "images"
+)
+
+# ==========================
+# Create directories
+# if not exist
+# ==========================
+directories = [
+    TEMPLATE_DIR,
+    UPLOAD_DIR,
     EXCEL_DIR,
-    exist_ok=True
-)
+    IMAGE_DIR
+]
 
-os.makedirs(
-    IMAGE_DIR,
-    exist_ok=True
-)
+for directory in directories:
+
+    os.makedirs(
+        directory,
+        exist_ok=True
+    )
+
+print("\nDirectories ready:")
+print("Templates:", TEMPLATE_DIR)
+print("Uploads:", UPLOAD_DIR)
+print("Excel:", EXCEL_DIR)
+print("Images:", IMAGE_DIR)
+
 
 # ==========================
 # Home page
@@ -55,9 +91,21 @@ os.makedirs(
 @app.route("/")
 def home():
 
-    return render_template(
-        "home.html"
-    )
+    try:
+        return render_template(
+            "home.html"
+        )
+
+    except Exception:
+        return (
+            """
+            <h2>home.html not found</h2>
+            <p>
+            Please create:
+            templates/home.html
+            </p>
+            """
+        )
 
 
 # ==========================
@@ -66,9 +114,33 @@ def home():
 @app.route("/upload-page")
 def upload_page():
 
-    return render_template(
-        "index.html"
-    )
+    try:
+        return render_template(
+            "index.html"
+        )
+
+    except Exception:
+        return (
+            """
+            <h2>index.html not found</h2>
+            <p>
+            Please create:
+            templates/index.html
+            </p>
+            """
+        )
+
+
+# ==========================
+# Health check
+# ==========================
+@app.route("/health")
+def health():
+
+    return jsonify({
+        "status":
+            "backend_running"
+    })
 
 
 # ==========================
@@ -86,8 +158,16 @@ def upload():
         )
     )
 
-    results = []
+    if not uploaded_files:
 
+        return jsonify({
+            "status":
+                "failed",
+            "message":
+                "No files uploaded"
+        }), 400
+
+    results = []
     excel_info = []
 
     for file in uploaded_files:
@@ -100,7 +180,9 @@ def upload():
             filename.lower()
         )
 
+        # ==================
         # Excel files
+        # ==================
         if lower_name.endswith(
             (
                 ".xlsx",
@@ -118,28 +200,48 @@ def upload():
 
             try:
 
-                df = pd.read_excel(
-                    dst
-                )
+                if lower_name.endswith(
+                    ".csv"
+                ):
+
+                    df = pd.read_csv(
+                        dst
+                    )
+
+                else:
+
+                    df = pd.read_excel(
+                        dst
+                    )
 
                 excel_info.append({
                     "file":
                         filename,
+
                     "rows":
                         len(df),
+
                     "columns":
                         df.columns.tolist()
                 })
 
-            except Exception:
+            except Exception as e:
 
-                pass
+                excel_info.append({
+                    "file":
+                        filename,
+
+                    "error":
+                        str(e)
+                })
 
             results.append(
                 f"Excel saved: {filename}"
             )
 
-        # Images
+        # ==================
+        # Image files
+        # ==================
         elif lower_name.endswith(
             (
                 ".jpg",
@@ -161,6 +263,9 @@ def upload():
                 f"Image saved: {filename}"
             )
 
+        # ==================
+        # Unsupported
+        # ==================
         else:
 
             results.append(
@@ -180,21 +285,33 @@ def upload():
 
 
 # ==========================
-# Start ngrok
-# ==========================
-public_url = ngrok.connect(
-    5000
-)
-
-print(
-    "\nPublic URL:",
-    public_url.public_url
-)
-
-# ==========================
 # Run Flask
 # ==========================
-app.run(
-    host="0.0.0.0",
-    port=5000
-)
+if __name__ == "__main__":
+
+    if USE_NGROK:
+
+        public_url = (
+            ngrok.connect(
+                5000
+            )
+        )
+
+        print(
+            "\nPublic URL:",
+            public_url.public_url
+        )
+
+    print(
+        "\nFlask running:"
+    )
+
+    print(
+        "http://localhost:5000"
+    )
+
+    app.run(
+        host="0.0.0.0",
+        port=5000,
+        debug=True
+    )
